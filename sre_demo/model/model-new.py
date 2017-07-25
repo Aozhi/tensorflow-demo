@@ -17,12 +17,6 @@ def PReLU(inputs, scope):
     return tf.nn.relu(inputs) + alphas * (inputs - abs(inputs)) * 0.5
 
 
-
-def my_conv2d(x, W, b, scope, strides = 1, padding = "VALID"):
-    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding=padding)
-    x = tf.nn.bias_add(x, b)
-    return PReLU(x, scope)
-
 def weight_variable(shape, name='weights'):
     initializer = tf.random_normal_initializer(mean=0, stddev=0.01)
     return tf.get_variable(shape=shape, initializer=initializer, name=name)
@@ -30,6 +24,11 @@ def weight_variable(shape, name='weights'):
 def bias_variable(shape, name='biases'):
     initializer = tf.constant_initializer(0.1)
     return tf.get_variable(shape=shape, initializer=initializer, name=name)
+
+def my_conv2d(x, W, b, scope, strides = 1, padding = "VALID"):
+    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding=padding)
+    x = tf.nn.bias_add(x, b)
+    return PReLU(x, scope)
 
 def get_cnn_net(inputs, reuse_symbol, FLAGS):
     """
@@ -39,59 +38,51 @@ def get_cnn_net(inputs, reuse_symbol, FLAGS):
         if int(inputs.shape[0]) != int(FLAGS.lstm_time * FLAGS.batch_size):
             print("cnn inputs shape error in lstm_time:", inputs.shape)
             exit(1)
-        # CNN define
-        weights = {
-            #'wc1': weight_variable([5, 5, FLAGS.lstm_time, 128], 'wc1'),
-            'wc1': weight_variable([5, 5, 1, 128], 'wc1'),
-            'wc2': weight_variable([1, 3, 128, 256], 'wc2'),
-            'wc3': weight_variable([2, 4, 256, 512], 'wc3'),
-#            'wd' : weight_variable([1 * 7 * 256, 1024], 'wd'),
-        }
-
-        biases = {
-            'bc1': bias_variable([128], 'bc1'),
-            'bc2': bias_variable([256], 'bc2'),
-            'bc3': bias_variable([512], 'bc3'),
-#            'bd' : bias_variable([1024], 'bd'),
-        }
-        if not reuse_symbol:
-            inputs_hist = tf.summary.histogram('inputs', inputs)
-            wc1_hist = tf.summary.histogram('conv1/weights', weights['wc1'])
-            bc1_hist = tf.summary.histogram('conv1/biases', biases['bc1'])
-            wc2_hist = tf.summary.histogram('conv2/weights', weights['wc2'])
-            bc2_hist = tf.summary.histogram('conv2/biases', biases['bc2'])
-            wc3_hist = tf.summary.histogram('conv3/weights', weights['wc3'])
-            bc3_hist = tf.summary.histogram('conv3/biases', biases['bc3'])
-            #  wd_hist = tf.summary.histogram('cnn_fc/weights', weights['wd'])
-            #  bd_hist = tf.summary.histogram('cnn_fc/biases', biases['bd'])
 
         #conv1
         tf.to_float(inputs)
         if not reuse_symbol:
             print("cnn inputs shape:", inputs.shape)
         #Couv-1
-        conv1 = my_conv2d(inputs, weights['wc1'], biases['bc1'], 'conv1_layer', 2)
-        conv1 = PReLU(conv1, 'conv1_PReLU')
+        conv1 = tf.layers.conv2d(
+                    inputs=inputs,
+                    filters=128,
+                    kernel_size=[5, 5],
+                    strides=[2, 2],
+                    padding="valid",
+                    activation=tf.nn.relu
+                )
         if not reuse_symbol:
             print("conv1 shape:", conv1.shape)
             conv1_hist = tf.summary.histogram('conv1_out', conv1)
         #max pool
-        conv1 = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name='max_pool1')
+        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2,2], stride=2)
         if not reuse_symbol:
-            conv1_maxpool_hist = tf.summary.histogram('conv1_pool_out', conv1)
-            print("conv1 pool shape:", conv1.shape)
+            conv1_maxpool_hist = tf.summary.histogram('conv1_pool_out', pool1)
+            print("conv1 pool shape:", pool1.shape)
         #Conv-2
-        conv2 = my_conv2d(conv1, weights['wc2'], biases['bc2'], 'conv2_layer', 1)
-        conv2 = PReLU(conv2, 'conv2_PReLU')
+        conv2 = tf.layers.conv2d(
+                    inputs=pool1,
+                    filters=256,
+                    kernel_size=[1, 3],
+                    padding="valid",
+                    activation=tf.nn.relu
+                )
         if not reuse_symbol:
             print("conv2 shape:", conv2.shape)
             conv2_hist = tf.summary.histogram('conv2_out', conv2)
         #max pool
-        conv2 = tf.nn.max_pool(conv2, ksize=[1, 1, 2, 1], strides=[1, 1, 2, 1], padding='SAME', name='max_pool2')
+        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[1,2], stride=[1,2])
         if not reuse_symbol:
-            conv2_maxpool_hist = tf.summary.histogram('conv2_pool_out', conv2)
-            print("conv2 pool shape:", conv2.shape)
-        conv3 = my_conv2d(conv2, weights['wc3'], biases['bc3'], 'conv3_layer', 1)
+            conv2_maxpool_hist = tf.summary.histogram('conv2_pool_out', pool2)
+            print("conv2 pool shape:", pool2.shape)
+        conv3 = tf.layers.conv2d(
+                    inputs=pool2,
+                    filters=512,
+                    kernel_size=[2, 4],
+                    padding="valid",
+                    activation=tf.nn.relu
+                )
         #Fully connected layer
         #  fc = tf.reshape(conv2, [-1, weights['wd'].get_shape().as_list()[0]])
         #  if not reuse_symbol:
