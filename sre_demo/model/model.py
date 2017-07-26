@@ -18,9 +18,12 @@ def PReLU(inputs, scope):
 
 
 
-def my_conv2d(x, W, b, scope, strides = 1, padding = "VALID"):
+def my_conv2d(FLAGS, x, W, b, scope, strides = 1, padding = "VALID"):
     x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding=padding)
     x = tf.nn.bias_add(x, b)
+    if FLAGS.batch_norm:
+        batch_norm_scope = scope + '_bn'
+        x = tf.contrib.layers.batch_norm(x, center=True, scale=True, is_training=FLAGS.training, scope=batch_norm_scope)
     return PReLU(x, scope)
 
 def weight_variable(shape, name='weights'):
@@ -70,8 +73,7 @@ def get_cnn_net(inputs, reuse_symbol, FLAGS):
         if not reuse_symbol:
             print("cnn inputs shape:", inputs.shape)
         #Couv-1
-        conv1 = my_conv2d(inputs, weights['wc1'], biases['bc1'], 'conv1_layer', 2)
-        conv1 = PReLU(conv1, 'conv1_PReLU')
+        conv1 = my_conv2d(FLAGS, inputs, weights['wc1'], biases['bc1'], 'conv1_layer', 2)
         if not reuse_symbol:
             print("conv1 shape:", conv1.shape)
             conv1_hist = tf.summary.histogram('conv1_out', conv1)
@@ -81,8 +83,7 @@ def get_cnn_net(inputs, reuse_symbol, FLAGS):
             conv1_maxpool_hist = tf.summary.histogram('conv1_pool_out', conv1)
             print("conv1 pool shape:", conv1.shape)
         #Conv-2
-        conv2 = my_conv2d(conv1, weights['wc2'], biases['bc2'], 'conv2_layer', 1)
-        conv2 = PReLU(conv2, 'conv2_PReLU')
+        conv2 = my_conv2d(FLAGS, conv1, weights['wc2'], biases['bc2'], 'conv2_layer', 1)
         if not reuse_symbol:
             print("conv2 shape:", conv2.shape)
             conv2_hist = tf.summary.histogram('conv2_out', conv2)
@@ -91,7 +92,7 @@ def get_cnn_net(inputs, reuse_symbol, FLAGS):
         if not reuse_symbol:
             conv2_maxpool_hist = tf.summary.histogram('conv2_pool_out', conv2)
             print("conv2 pool shape:", conv2.shape)
-        conv3 = my_conv2d(conv2, weights['wc3'], biases['bc3'], 'conv3_layer', 1)
+        conv3 = my_conv2d(FLAGS, conv2, weights['wc3'], biases['bc3'], 'conv3_layer', 1)
         #Fully connected layer
         #  fc = tf.reshape(conv2, [-1, weights['wd'].get_shape().as_list()[0]])
         #  if not reuse_symbol:
@@ -145,6 +146,8 @@ def get_lstm_net(inputs, reuse_symbol, FLAGS):
         outputs = tf.transpose(outputs, [1,0,2])
         last = outputs[-1]
         last = PReLU(last, 'LSTM_out')
+        if FLAGS.batch_norm:
+            last = tf.contrib.layers.batch_norm(last, center=True, scale=True, is_training=FLAGS.training, scope='lstm_bn')
         if not reuse_symbol:
             print("lstm last shape:", last.shape)
             last_hist = tf.summary.histogram('lstm_out', last)

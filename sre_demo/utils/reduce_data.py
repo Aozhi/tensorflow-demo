@@ -73,8 +73,8 @@ def reduce_batch_data(utt_features, utt_labels, utt_num_samples, FLAGS, c_utt_in
         if c_utt_used_samples >= utt_num_samples[c_utt_index]:
             c_utt_index += 1
             c_utt_used_samples = 0
-        if c_utt_index > len(utt_labels):
-            return np.array([]), np.array([]), np.array([]), -1, 0
+        if c_utt_index >= len(utt_labels):
+            return np.array([]), np.array([]), -1, 0
         one_label = utt_labels[int(c_utt_index)]
         one_feature = neighbor_data(utt_features[int(c_utt_index)], left_context, right_context, int(c_utt_used_samples * lstm_time), int((c_utt_used_samples + 1) * lstm_time))
         #  print("one feature shape:", one_feature.shape)

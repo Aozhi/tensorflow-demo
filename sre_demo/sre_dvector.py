@@ -16,6 +16,7 @@ import os
 
 tf.app.flags.DEFINE_string('train_dir', 'dvector_model/train_logs', 'train model store path')
 
+tf.app.flags.DEFINE_string('train_file', '/home/hanyu/tensflow/sre-lstm/sre_demo/train.h5', 'train data file path')
 
 tf.app.flags.DEFINE_float('learning_rate', 0.0005,
                           'Initial learning rate')
@@ -32,8 +33,11 @@ tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.94,
 tf.app.flags.DEFINE_string('optimizer', 'adam', 'Specifies the optimizer format')
 tf.app.flags.DEFINE_float('momentum', 0.5, 'Specifies the momentum param')
 
-tf.app.flags.DEFINE_integer('batch_size', 128,
-                            'The number of samples in each batch. To simulate shuffling input data ')
+tf.app.flags.DEFINE_integer('batch_size', 32,
+                            'The number of samples in each batch.')
+
+tf.app.flags.DEFINE_integer('num_advance_batch_samples', 100,
+                            'The number of batches that are shuffled advance. To simulate shuffling input data ')
 
 tf.app.flags.DEFINE_float('num_epochs_per_decay', 2.0,
                           'Number of epochs after which learning rate decays.')
@@ -52,6 +56,7 @@ tf.app.flags.DEFINE_float('cnn_dropout', 0.75, 'probability to keep units in cnn
 tf.app.flags.DEFINE_float('lstm_in_dropout', 0.5, 'probability to keep input units in lstm')
 tf.app.flags.DEFINE_float('lstm_out_dropout', 0.5, 'probability to keep output units in lstm')
 tf.app.flags.DEFINE_bool('training', True, 'training state')
+tf.app.flags.DEFINE_bool('batch_norm', True, 'doing batch normalization')
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -127,6 +132,7 @@ else:
 
 
 file_train = tb.open_file(os.path.join(os.getcwd(), 'train.h5'), 'r')
+#file_train = tb.open_file(FLAGS.train_file, 'r')
 utts = file_train.root.utterance[:]
 speakerinfo = file_train.root.speakerinfo[:]
 utt_features, utt_labels, utt_num_samples = split_data_into_utt(utts, speakerinfo, FLAGS)
@@ -146,7 +152,7 @@ def main(_):
         print("number of batches:", num_batches_per_epoch)
         global_step = tf.Variable(0, name='global_step', trainable=False)
         #  learning_rate = _configure_learning_rate(num_samples_per_epoch, global_step)
-        boundaries = [5000, 10000, 20000, 40000, 80000, 120000]
+        boundaries = [1000, 3000, 5000, 10000, 15000, 20000]
         values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001]
         learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
         neighbor_dim = FLAGS.left_context + FLAGS.right_context + 1
@@ -211,16 +217,17 @@ def main(_):
         #      advance_batch_datas.extend(batch_datas)
         #      advance_batch_labels.extend(batch_labels)
         #  advance_batch_datas, advance_batch_labels, _ = shuffle_data_label(advance_batch_datas, advance_batch_labels)
-
+        #
         last_loss = -1.0
+        num_advance_batch_samples = FLAGS.num_advance_batch_samples
         for epoch in range(FLAGS.num_epochs):
-            num_advance_batch_samples = 100
             c_utt_index = 0
             c_utt_used_samples = 0
             utt_features, utt_labels, utt_num_samples = shuffle_data_label(utt_features, utt_labels, utt_num_samples)
             advance_batch_datas = []
             advance_batch_labels = []
             for batch_num in range(num_batches_per_epoch):
+            #  for batch_num in range(32):
                 step += 1
                 if len(advance_batch_labels) < FLAGS.batch_size and c_utt_index >= 0:
                     for _ in range(num_advance_batch_samples):
@@ -234,16 +241,18 @@ def main(_):
                 if c_utt_index < 0:
                     break
 
+                batch_datas, batch_labels = advance_batch_datas[0:FLAGS.batch_size], advance_batch_labels[0:FLAGS.batch_size]
                 #  start_idx = batch_num * FLAGS.batch_size
                 #  end_idx = (batch_num + 1) * FLAGS.batch_size
-                batch_datas, batch_labels = advance_batch_datas[0:FLAGS.batch_size], advance_batch_labels[0:FLAGS.batch_size]
                 #  batch_datas = advance_batch_datas[start_idx: end_idx]
                 #  batch_labels = advance_batch_labels[start_idx: end_idx]
                 #  print("batch label:", batch_labels)
                 _, loss_value, train_accuracy, summary, out_judge, out_true_judge, out_prob, out_learning_rate, softmax_out = sess.run([train_op, loss, accuracy, summary_merged, judge, true_judge, prob, learning_rate, softmax_result],
                         feed_dict={inputs: batch_datas, labels: batch_labels, global_step: step})
+
                 advance_batch_datas = advance_batch_datas[FLAGS.batch_size:]
                 advance_batch_labels = advance_batch_labels[FLAGS.batch_size:]
+
                 summary_writer.add_summary(summary, step)
                 #  if batch_num % 100 == 0:
                 print("Epoch " + str(epoch + 1) + ", Minibatch " + str(batch_num + 1) + \
