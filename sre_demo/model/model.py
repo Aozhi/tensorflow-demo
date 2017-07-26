@@ -145,9 +145,9 @@ def get_lstm_net(inputs, reuse_symbol, FLAGS):
         outputs, _ = tf.nn.dynamic_rnn(stack_lstm, inputs, dtype=tf.float32, initial_state=initial_state)
         outputs = tf.transpose(outputs, [1,0,2])
         last = outputs[-1]
-        last = PReLU(last, 'LSTM_out')
         if FLAGS.batch_norm:
             last = tf.contrib.layers.batch_norm(last, center=True, scale=True, is_training=FLAGS.training, scope='lstm_bn')
+        last = PReLU(last, 'LSTM_out')
         if not reuse_symbol:
             print("lstm last shape:", last.shape)
             last_hist = tf.summary.histogram('lstm_out', last)
