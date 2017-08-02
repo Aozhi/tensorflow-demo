@@ -168,6 +168,7 @@ test_features, test_labels, test_num_samples = test_features[0:10], test_labels[
 #  utt_num_samples = utt_num_samples_temp
 
 num_speakers = np.max(utt_labels)
+print("number of speakers:", num_speakers)
 print("utts feature length:", len(utt_features), ", utts labels length:", len(utt_labels), ", utt num samples list length:", len(utt_num_samples))
 print("utt num samples:", utt_num_samples)
 #  time.sleep(100)

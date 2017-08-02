@@ -11,12 +11,12 @@ import tensorflow as tf
 import numpy as np
 from utils.reduce_data import *
 from utils.dvector_tool import *
-from model.model_test import *
+from model.model import *
 from utils.tools import *
 import os
 np.set_printoptions(threshold='nan')
 
-tf.app.flags.DEFINE_string('train_dir', 'dvector_model_new_test/train_logs', 'train model store path')
+tf.app.flags.DEFINE_string('train_dir', 'dvector_model/train_logs', 'train model store path')
 
 
 tf.app.flags.DEFINE_float('learning_rate', 0.0005,
@@ -144,7 +144,7 @@ utt_features = utt_features[0:200]
 utt_labels = utt_labels[0:200]
 utt_num_samples = utt_num_samples[0:200]
 print("num samples:", np.sum(utt_num_samples))
-num_speakers = 42
+num_speakers = 1972
 
 #model file path
 check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-1600')
