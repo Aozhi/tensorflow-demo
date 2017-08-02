@@ -186,8 +186,8 @@ def main(_):
         global_step = tf.Variable(0, name='global_step', trainable=False)
         #  learning_rate = _configure_learning_rate(num_samples_per_epoch, global_step)
         # custom learning rate
-        boundaries = [2000, 5000, 8000, 12000, 15000, 18000, 20000, 25000]
-        values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.000005]
+        boundaries = [2000, 5000, 8000, 12000, 15000, 18000, 20000, 30000]
+        values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.000005, 0.000003]
         # small dataset learning rate
         #  boundaries = [300, 1000, 1500, 2000, 3000, 4000, 5000, 6000]
         #  values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.00005, 0.000005]
