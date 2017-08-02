@@ -15,6 +15,7 @@ def neighbor_data(data, left_context, right_context, start_idx, end_idx):
     #data format: [num_frames, feature] for one utt
     #  print("param data shape:", data.shape, "left_context:", left_context, "right_context:", right_context, "start_idx:", start_idx, "end_idx:", end_idx)
     data_size = data.shape[0]
+#    print("data size:", data_size)
     total_time = left_context + right_context + 1
     feature_dim = data.shape[1]
     split_datas = []
@@ -28,7 +29,9 @@ def neighbor_data(data, left_context, right_context, start_idx, end_idx):
         data_stack = np.row_stack((data_stack, data[i:i + right_context + 1, :]))
         if i + right_context + 1 > data_size:
             data_stack = np.row_stack((data_stack, np.tile(data[-1, :], (i + right_context + 1 - data_size, 1))))
+#            print("i + right_context + 1 - data_size:", i + right_context + 1 - data_size)
         if data_stack.shape != (total_time, feature_dim):
+            print("data stack shape:", data_stack.shape)
             print(data_stack[-1, :])
             print(data[i + right_context, :])
             print("error when make data, data_stack shape:", data_stack.shape, "total_time:", total_time, "feature_dim:", feature_dim)

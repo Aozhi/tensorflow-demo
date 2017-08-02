@@ -10,9 +10,12 @@ import tables as tb
 import tensorflow as tf
 import numpy as np
 from utils.reduce_data import *
+from utils.dvector_tool import *
 from model.model import *
 from utils.tools import *
 import os
+
+np.set_printoptions(threshold='nan')
 
 tf.app.flags.DEFINE_string('train_dir', 'dvector_model/train_logs', 'train model store path')
 
@@ -33,16 +36,21 @@ tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.94,
 tf.app.flags.DEFINE_string('optimizer', 'adam', 'Specifies the optimizer format')
 tf.app.flags.DEFINE_float('momentum', 0.5, 'Specifies the momentum param')
 
-tf.app.flags.DEFINE_integer('batch_size', 32,
+tf.app.flags.DEFINE_integer('batch_size', 16,
                             'The number of samples in each batch.')
 
-tf.app.flags.DEFINE_integer('num_advance_batch_samples', 100,
+tf.app.flags.DEFINE_integer('num_small_test_batch_size', 60,
+                            'number of batch in small dataset test')
+tf.app.flags.DEFINE_bool('small_dataset_test', False,
+                         'whether doing small dataset test.')
+
+tf.app.flags.DEFINE_integer('num_advance_batch_samples', 200,
                             'The number of batches that are shuffled advance. To simulate shuffling input data ')
 
 tf.app.flags.DEFINE_float('num_epochs_per_decay', 2.0,
                           'Number of epochs after which learning rate decays.')
 
-tf.app.flags.DEFINE_integer('num_epochs', 10000,
+tf.app.flags.DEFINE_integer('num_epochs', 50,
                             'The number of epochs for training')
 
 tf.app.flags.DEFINE_integer('lstm_hidden_units', 1024, 'number of lstm cell hidden untis')
@@ -50,12 +58,14 @@ tf.app.flags.DEFINE_integer('lstm_num_layers', 3, 'number of lstm layers')
 tf.app.flags.DEFINE_integer('feature_dim', 40, 'dim of feature')
 tf.app.flags.DEFINE_integer('left_context', 4, 'number of left context')
 tf.app.flags.DEFINE_integer('right_context', 4, 'number of right context')
-tf.app.flags.DEFINE_integer('lstm_time', 30, 'lstm max time')
+tf.app.flags.DEFINE_integer('lstm_time', 120, 'lstm max time')
+tf.app.flags.DEFINE_integer('cnn_num_filter', 4, 'define number of cnn filter, lstm_time must be divided exactly of this number, using in conv2d')
+tf.app.flags.DEFINE_integer('cnn_shift_time', 3, 'cnn depth stride time, using in conv3d')
 tf.app.flags.DEFINE_integer('dvector_dim', 600, 'dvector dim')
 tf.app.flags.DEFINE_float('cnn_dropout', 0.75, 'probability to keep units in cnn')
 tf.app.flags.DEFINE_float('lstm_in_dropout', 0.5, 'probability to keep input units in lstm')
 tf.app.flags.DEFINE_float('lstm_out_dropout', 0.5, 'probability to keep output units in lstm')
-tf.app.flags.DEFINE_bool('training', True, 'training state')
+tf.app.flags.DEFINE_bool('training', True, 'batch norm training model')
 tf.app.flags.DEFINE_bool('batch_norm', True, 'doing batch normalization')
 
 
@@ -127,7 +137,7 @@ model_path = FLAGS.train_dir
 if not os.path.exists(model_path):
     os.makedirs(model_path)
 else:
-    empty_dir(model_path)
+    empty_dir(os.path.dirname(model_path))
 
 
 
@@ -136,8 +146,30 @@ file_train = tb.open_file(os.path.join(os.getcwd(), 'train.h5'), 'r')
 utts = file_train.root.utterance[:]
 speakerinfo = file_train.root.speakerinfo[:]
 utt_features, utt_labels, utt_num_samples = split_data_into_utt(utts, speakerinfo, FLAGS)
-num_speakers = np.max(speakerinfo[:, 0])
+
+file_test = tb.open_file(os.path.join(os.getcwd(), 'test.h5'), 'r')
+test_utts = file_test.root.utterance[:]
+test_speakerinfo = file_test.root.speakerinfo[:]
+test_features, test_labels, test_num_samples = split_data_into_utt(test_utts, test_speakerinfo, FLAGS)
+test_features, test_labels, test_num_samples = test_features[0:10], test_labels[0:10], test_num_samples[0:10]
+#  c_utt = 0
+#  utt_features_temp = []
+#  utt_labels_temp = []
+#  utt_num_samples_temp = []
+#  for index in range(len(utt_labels)):
+#      if int(c_utt) != int(utt_labels[index]):
+#          utt_features_temp.append(utt_features[index])
+#          utt_labels_temp.append(utt_labels[index])
+#          utt_num_samples_temp.append(utt_num_samples[index])
+#          c_utt = utt_labels[index]
+
+#  utt_features = utt_features_temp
+#  utt_labels = utt_labels_temp
+#  utt_num_samples = utt_num_samples_temp
+
+num_speakers = np.max(utt_labels)
 print("utts feature length:", len(utt_features), ", utts labels length:", len(utt_labels), ", utt num samples list length:", len(utt_num_samples))
+print("utt num samples:", utt_num_samples)
 #  time.sleep(100)
 #      exit(1)
 
@@ -152,8 +184,12 @@ def main(_):
         print("number of batches:", num_batches_per_epoch)
         global_step = tf.Variable(0, name='global_step', trainable=False)
         #  learning_rate = _configure_learning_rate(num_samples_per_epoch, global_step)
-        boundaries = [1000, 3000, 5000, 10000, 15000, 20000]
-        values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001]
+        # custom learning rate
+        boundaries = [2000, 5000, 8000, 12000, 15000, 18000, 20000, 25000]
+        values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.000005]
+        # small dataset learning rate
+        #  boundaries = [300, 1000, 1500, 2000, 3000, 4000, 5000, 6000]
+        #  values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.00005, 0.000005]
         learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
         neighbor_dim = FLAGS.left_context + FLAGS.right_context + 1
         lstm_time = FLAGS.lstm_time
@@ -161,10 +197,7 @@ def main(_):
             with tf.device('/gpu:0'):
                 inputs = tf.placeholder(tf.float32, [FLAGS.batch_size, lstm_time, neighbor_dim, FLAGS.feature_dim])
                 labels = tf.placeholder(tf.int32, [FLAGS.batch_size])
-                if FLAGS.training:
-                    logits, _ = prepare_model(inputs, num_speakers, FLAGS)
-                else:
-                    logits, dvectors = prepare_model(inputs, num_speakers, FLAGS)
+                logits, dvectors = prepare_model(inputs, num_speakers, FLAGS)
                 softmax_result = tf.nn.softmax(logits)
                 label_onehot = tf.one_hot(labels - 1, depth=num_speakers)
                 opt = _configure_optimizer(learning_rate)
@@ -178,7 +211,7 @@ def main(_):
                     prob = tf.nn.softmax(logits)
 
                 with tf.name_scope('train_op'):
-                    train_op = opt.minimize(loss)
+                    train_op = opt.minimize(loss, global_step=global_step)
                 with tf.name_scope('accuracy'):
                     correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(label_onehot, 1))
                     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name='accuracy')
@@ -191,7 +224,7 @@ def main(_):
         summary_op = tf.summary.merge(list(summaries), name='summary_op')
         summary_merged = tf.summary.merge_all()
 
-    #  check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-32000')
+    #  check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-1200')
     config = tf.ConfigProto(allow_soft_placement=True, device_count = {'GPU':1})
     config.gpu_options.allow_growth = True
     with tf.Session(graph=graph, config=config) as sess:
@@ -200,24 +233,59 @@ def main(_):
         sess.run(tf.global_variables_initializer())
         #  sess.run(tf.local_variables_initializer())
         #  saver.restore(sess, check_point_dir)
-        step = 0
         #  print(batch_datas[:])
         #  print(batch_labels[:])
         #  print("utts_train:", utts_train)
         #  exit(1)
 
         # small data for test
-        #  utt_features, utt_labels, utt_num_samples = shuffle_data_label(utt_features, utt_labels, utt_num_samples)
-        #  advance_batch_datas = []
-        #  advance_batch_labels = []
-        #  c_utt_index = 0
-        #  c_utt_used_samples = 0
-        #  for _ in range(400):
-        #      batch_datas, batch_labels, c_utt_index, c_utt_used_samples = reduce_batch_data(utt_features, utt_labels, utt_num_samples, FLAGS, c_utt_index, c_utt_used_samples)
-        #      advance_batch_datas.extend(batch_datas)
-        #      advance_batch_labels.extend(batch_labels)
-        #  advance_batch_datas, advance_batch_labels, _ = shuffle_data_label(advance_batch_datas, advance_batch_labels)
-        #
+        if FLAGS.small_dataset_test:
+            print("It's in small dataset test")
+            advance_batch_datas = []
+            advance_batch_labels = []
+            c_utt_index = 0
+            c_utt_used_samples = 0
+            for _ in range(70):
+                batch_datas, batch_labels, c_utt_index, c_utt_used_samples = reduce_batch_data(utt_features, utt_labels, utt_num_samples, FLAGS, c_utt_index, c_utt_used_samples)
+                advance_batch_datas.extend(batch_datas)
+                advance_batch_labels.extend(batch_labels)
+                if c_utt_index < 0:
+                    print("out of utts")
+                    break
+            if len(advance_batch_datas) != len(advance_batch_labels):
+                print("error dim between datas and labels")
+            print("number of advance dataset:", len(advance_batch_labels))
+            advance_batch_datas, advance_batch_labels, _ = shuffle_data_label(advance_batch_datas, advance_batch_labels)
+
+            for epoch in range(FLAGS.num_epochs):
+                advance_batch_datas, advance_batch_labels, _ = shuffle_data_label(advance_batch_datas, advance_batch_labels)
+                for batch_num in range(FLAGS.num_small_test_batch_size):
+                    start_idx = batch_num * FLAGS.batch_size
+                    end_idx = (batch_num + 1) * FLAGS.batch_size
+                    batch_datas = advance_batch_datas[start_idx: end_idx]
+                    batch_labels = advance_batch_labels[start_idx: end_idx]
+                    _, loss_value, train_accuracy, summary, out_judge, \
+                    out_true_judge, out_prob, out_learning_rate, softmax_out, step, dvec = sess.run(
+                        [train_op, loss, accuracy, summary_merged, \
+                        judge, true_judge, prob, learning_rate, softmax_result, global_step, dvectors], \
+                        feed_dict={inputs: batch_datas, labels: batch_labels})
+                    summary_writer.add_summary(summary, step)
+                    print("Epoch " + str(epoch + 1) + ", Minibatch " + str(batch_num + 1) + \
+                        " of %d " % num_batches_per_epoch + ", Minibatch Loss=" + "{:.4f}".format(loss_value) + \
+                        ", TRAIN ACCURACY=" + "{:.3f}".format(100 * train_accuracy))
+                    print("current utt index:", c_utt_index)
+                    print("current utt used samples:", c_utt_used_samples)
+                    print("global step:", step)
+                    #  print("softmax result:", softmax_out[:])
+                    print("mean softmax result:", np.mean(np.max(softmax_out, axis=1)))
+                    print("program out labels:", out_judge + 1)
+                    print("true lables:", out_true_judge + 1)
+                    print("learning rate:", out_learning_rate)
+                    if step % 100 == 0:
+                        print("dvectors:", dvec[:])
+                        saver.save(sess, model_path, global_step=step)
+            exit(1)
+
         last_loss = -1.0
         num_advance_batch_samples = FLAGS.num_advance_batch_samples
         for epoch in range(FLAGS.num_epochs):
@@ -227,8 +295,6 @@ def main(_):
             advance_batch_datas = []
             advance_batch_labels = []
             for batch_num in range(num_batches_per_epoch):
-            #  for batch_num in range(32):
-                step += 1
                 if len(advance_batch_labels) < FLAGS.batch_size and c_utt_index >= 0:
                     for _ in range(num_advance_batch_samples):
                         batch_datas, batch_labels, c_utt_index, c_utt_used_samples = reduce_batch_data(utt_features, utt_labels, utt_num_samples, FLAGS, c_utt_index, c_utt_used_samples)
@@ -242,13 +308,11 @@ def main(_):
                     break
 
                 batch_datas, batch_labels = advance_batch_datas[0:FLAGS.batch_size], advance_batch_labels[0:FLAGS.batch_size]
-                #  start_idx = batch_num * FLAGS.batch_size
-                #  end_idx = (batch_num + 1) * FLAGS.batch_size
-                #  batch_datas = advance_batch_datas[start_idx: end_idx]
-                #  batch_labels = advance_batch_labels[start_idx: end_idx]
-                #  print("batch label:", batch_labels)
-                _, loss_value, train_accuracy, summary, out_judge, out_true_judge, out_prob, out_learning_rate, softmax_out = sess.run([train_op, loss, accuracy, summary_merged, judge, true_judge, prob, learning_rate, softmax_result],
-                        feed_dict={inputs: batch_datas, labels: batch_labels, global_step: step})
+                _, loss_value, train_accuracy, summary, out_judge, \
+                out_true_judge, out_prob, out_learning_rate, softmax_out, step = sess.run(
+                        [train_op, loss, accuracy, summary_merged, \
+                        judge, true_judge, prob, learning_rate, softmax_result, global_step], \
+                        feed_dict={inputs: batch_datas, labels: batch_labels})
 
                 advance_batch_datas = advance_batch_datas[FLAGS.batch_size:]
                 advance_batch_labels = advance_batch_labels[FLAGS.batch_size:]
@@ -260,9 +324,11 @@ def main(_):
                         ", TRAIN ACCURACY=" + "{:.3f}".format(100 * train_accuracy))
                 #  print(batch_datas)
                 #  print(batch_labels)
-                #  print("current utt index:", c_utt_index)
-                #  print("current utt used samples:", c_utt_used_samples)
-                print("max softmax result:", np.max(softmax_out))
+                print("current utt index:", c_utt_index)
+                print("current utt used samples:", c_utt_used_samples)
+                print("global step:", step)
+                #  print("softmax result:", softmax_out[:])
+                print("mean softmax result:", np.mean(np.max(softmax_out, axis=1)))
                 print("program out labels:", out_judge + 1)
                 print("true lables:", out_true_judge + 1)
                 print("learning rate:", out_learning_rate)
@@ -274,11 +340,33 @@ def main(_):
                         exit(1)
                     else:
                         last_loss = loss_value
-                #  print(out_prob)
-                #      print("pred 0 is ", pred_res[0,:], pred_res_in[0])
-                #      print("pred prob:", pred_out_prob[0])
-                #  exit(1)
-            saver.save(sess, model_path, global_step=step)
+                if step % 500 == 0:
+                    saver.save(sess, model_path, global_step=step)
+                    # testing small test dataset
+                    test_utt_index = 0
+                    test_utt_used_samples = 0
+                    test_batch_datas = []
+                    test_batch_labels = []
+                    test_dvectors = {}
+                    for _ in range(int(np.sum(test_num_samples) / FLAGS.batch_size)):
+                        batch_datas, batch_labels, test_utt_index, test_utt_used_samples = reduce_batch_data(test_features, test_labels, test_num_samples, FLAGS, test_utt_index, test_utt_used_samples)
+                        test_batch_datas.extend(batch_datas)
+                        test_batch_labels.extend(batch_labels)
+                        if test_utt_index < 0:
+                            break
+                    print("test batch data length:", len(test_batch_labels))
+                    for index in range(int(len(batch_labels) / FLAGS.batch_size)):
+                        start_idx = index * FLAGS.batch_size
+                        end_idx = (index + 1) * FLAGS.batch_size
+                        sample_data = test_batch_datas[start_idx: end_idx]
+                        sample_label = test_batch_labels[start_idx: end_idx]
+                        spk_dvectors = sess.run([dvectors], feed_dict={inputs: sample_data, labels:sample_label})[0]
+                        for i in range(spk_dvectors.shape[0]):
+                            spk_dvector = dvector_normalize_length(spk_dvectors[i], FLAGS)
+                            speaker_label = str(sample_label[i]) + '_' + str(i) + '_' + str(index)
+                            test_dvectors[speaker_label] = spk_dvector
+                    eer, eer_th = compute_eer(test_dvectors, test_dvectors)
+                    print("eer: %.2f, threshold: %.2f" % (eer, eer_th))
 
 if __name__ == "__main__":
     tf.app.run()
