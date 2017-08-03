@@ -58,10 +58,10 @@ def compute_eer(enroll_dvectors, test_dvectors):
     target_scores.sort()
     nontarget_scores.sort(reverse=True)
 
-    #  print("target_scores:",target_scores)
-    #  print("nontarget_scores:",nontarget_scores)
-    #  print("target_trials:", target_trials)
-    #  print("nontarget_trials:", nontarget_trials)
+    print("target_scores:",target_scores)
+    print("nontarget_scores:",nontarget_scores)
+    print("target_trials:", target_trials)
+    print("nontarget_trials:", nontarget_trials)
     target_size = len(target_scores)
     nontarget_size = len(nontarget_scores)
     eer = 0.0

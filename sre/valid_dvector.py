@@ -16,7 +16,10 @@ from utils.tools import *
 import os
 np.set_printoptions(threshold='nan')
 
-tf.app.flags.DEFINE_string('train_dir', 'dvector_model/train_logs', 'train model store path')
+tf.app.flags.DEFINE_string('train_dir', 'dvector_model_test/train_logs', 'train model store path')
+tf.app.flags.DEFINE_string('train_file', os.path.join(os.getcwd(), 'train.h5'), 'train data file path')
+tf.app.flags.DEFINE_string('check_point', '9600', 'train model store step')
+tf.app.flags.DEFINE_string('num_speakers', 1972, 'equal to number of speaker in train dataset, which is used to restore model')
 
 
 tf.app.flags.DEFINE_float('learning_rate', 0.0005,
@@ -129,14 +132,10 @@ def _configure_optimizer(learning_rate):
 
 
 model_path = FLAGS.train_dir
-#  if not os.path.exists(model_path):
-#      os.makedirs(model_path)
-#  else:
-#      empty_dir(model_path)
 
 
 
-file_train = tb.open_file(os.path.join(os.getcwd(), 'train.h5'), 'r')
+file_train = tb.open_file(FLAGS.train_file, 'r')
 utts = file_train.root.utterance[:]
 speakerinfo = file_train.root.speakerinfo[:]
 utt_features, utt_labels, utt_num_samples = split_data_into_utt(utts, speakerinfo, FLAGS)
@@ -144,10 +143,10 @@ utt_features = utt_features[0:200]
 utt_labels = utt_labels[0:200]
 utt_num_samples = utt_num_samples[0:200]
 print("num samples:", np.sum(utt_num_samples))
-num_speakers = 1972
+num_speakers = FLAGS.num_speakers
 
 #model file path
-check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-1600')
+check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-' + FLAGS.check_point)
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -157,48 +156,15 @@ def main(_):
         global_step = tf.Variable(0, name='global_step', trainable=False)
         neighbor_dim = FLAGS.left_context + FLAGS.right_context + 1
         lstm_time = FLAGS.lstm_time
-        #  cnn_inputs = tf.placeholder(tf.float32, [30, neighbor_dim, FLAGS.feature_dim, 1])
-        #  cnn = get_cnn_net(cnn_inputs, FLAGS)
-        #  print("cnn shape:", cnn.shape)
         with tf.variable_scope(tf.get_variable_scope()):
             with tf.device('/gpu:0'):
                 inputs = tf.placeholder(tf.float32, [FLAGS.batch_size, lstm_time, neighbor_dim, FLAGS.feature_dim])
                 labels = tf.placeholder(tf.int32, [FLAGS.batch_size])
                 label_onehot = tf.one_hot(labels - 1, depth=num_speakers)
-                #  if FLAGS.training:
-                #      logits, _ = prepare_model(inputs, num_speakers, FLAGS)
-                #      softmax_result = tf.nn.softmax(logits)
-                #      label_onehot = tf.one_hot(labels - 1, depth=num_speakers)
-                #      opt = _configure_optimizer(learning_rate)
-                #      cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=label_onehot, name='loss')
-                #      with tf.name_scope('loss'):
-                #          loss = tf.reduce_mean(cross_entropy)
-                #
-                #      with tf.name_scope('result_print'):
-                #          judge = tf.argmax(logits, 1)
-                #          true_judge = tf.argmax(label_onehot, 1)
-                #          prob = tf.nn.softmax(logits)
-                #
-                #      with tf.name_scope('train_op'):
-                #          train_op = opt.minimize(loss)
-                #      with tf.name_scope('accuracy'):
-                #          correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(label_onehot, 1))
-                #          accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name='accuracy')
-                #  else:
                 logits, dvector = prepare_model(inputs, num_speakers, FLAGS)
                 judge = tf.argmax(logits, 1)
                 true_judge = tf.argmax(label_onehot, 1)
                 softmax_result = tf.nn.softmax(logits)
-        #  if FLAGS.training:
-        #      summaries = set(tf.get_collection(tf.GraphKeys.SUMMARIES))
-        #      summaries.add(tf.summary.scalar('learning_rate', learning_rate))
-        #      summaries.add(tf.summary.scalar('global_step', global_step))
-        #      summaries.add(tf.summary.scalar('eval/Loss', loss))
-        #      summaries.add(tf.summary.scalar('accuracy', accuracy))
-        #      summaries |= set(tf.get_collection(tf.GraphKeys.SUMMARIES))
-        #      summary_op = tf.summary.merge(list(summaries), name='summary_op')
-        #      summary_merged = tf.summary.merge_all()
-
 
     with tf.Session(graph=graph, config=tf.ConfigProto(allow_soft_placement=True, device_count = {'GPU':1})) as sess:
         saver = tf.train.Saver()
@@ -213,18 +179,6 @@ def main(_):
         print("test_labels:", test_labels)
 
         # make test data dvectors, key as speakerid, value as dvector
-        #  test_dvectors = {}
-        #  sample_data, sample_label, _, _ = reduce_batch_data(test_features, test_labels, test_num_samples, FLAGS, 0, 0)
-        #  spk_dvector, out_label, out_true_label = sess.run([dvector, judge, true_judge], feed_dict={inputs: sample_data, labels:sample_label})
-        #  print("program out labels:", out_label + 1)
-        #  print("true lables:", out_true_label + 1)
-        #  one_data = np.row_stack([[sample_data[0]]*FLAGS.batch_size])
-        #  spk_dvector, softmax_out = sess.run([dvector, softmax_result], feed_dict={inputs: one_data, labels:sample_label})
-        #  print("spk labels:", sample_label)
-        #  print("spk dvector shape:",spk_dvector.shape)
-        #  print("spk dvector 0 shape:",spk_dvector[0].shape)
-        #  print(spk_dvector)
-        #  exit(1)
         test_dvectors = {}
         for index in range(len(test_labels)):
             speaker_label = test_labels[index]
@@ -239,8 +193,6 @@ def main(_):
                 speaker_dvectors.append(spk_dvector)
                 print("program out labels:", out_label + 1)
                 print("true lables:", out_true_label + 1)
-            # use mean of dvectors as speaker dvector
-            # speaker_average_dvector = np.mean(speaker_dvectors, axis=0)
             #speaker_label = "speakerid"_"utt_index"
             speaker_label = str(test_labels[index]) + '_' + str(index)
             speaker_average_dvector = np.mean(speaker_dvectors, axis=0)
@@ -251,7 +203,7 @@ def main(_):
         #  print("test dvectors:", test_dvectors )
         print("test dvectors length:", len(test_dvectors))
         eer, eer_th = compute_eer(test_dvectors, test_dvectors)
-        print("eer: %.2f, threshold: %.2f" % (eer, eer_th))
+        print("eer: %.4f, threshold: %.4f" % (eer, eer_th))
 
 
 

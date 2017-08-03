@@ -19,7 +19,11 @@ np.set_printoptions(threshold='nan')
 
 tf.app.flags.DEFINE_string('train_dir', 'dvector_model/train_logs', 'train model store path')
 
-tf.app.flags.DEFINE_string('train_file', '/home/hanyu/tensflow/sre-lstm/sre_demo/train.h5', 'train data file path')
+tf.app.flags.DEFINE_string('check_point', '200', 'train model store step')
+
+tf.app.flags.DEFINE_string('train_file', os.path.join(os.getcwd(), 'train.h5'), 'train data file path')
+tf.app.flags.DEFINE_string('test_file', os.path.join(os.getcwd(), 'test.h5'), 'test data file path')
+tf.app.flags.DEFINE_integer('num_test_utt', 20, 'number of utterance in test.h5 dataset')
 
 tf.app.flags.DEFINE_float('learning_rate', 0.0005,
                           'Initial learning rate')
@@ -35,6 +39,7 @@ tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.94,
 
 tf.app.flags.DEFINE_string('optimizer', 'adam', 'Specifies the optimizer format')
 tf.app.flags.DEFINE_float('momentum', 0.5, 'Specifies the momentum param')
+tf.app.flags.DEFINE_float('opt_epsilon', 0.1, 'a current good choice is 1.0 or 0.1 in ImageNet example')
 
 tf.app.flags.DEFINE_integer('batch_size', 16,
                             'The number of samples in each batch.')
@@ -107,7 +112,9 @@ def _configure_optimizer(learning_rate):
                     learning_rate,
                     initial_accumulator_value=FLAGS.adagrad_initial_accumulator_value)
     elif FLAGS.optimizer == 'adam':
-        optimizer = tf.train.AdamOptimizer(learning_rate)
+        optimizer = tf.train.AdamOptimizer(
+                    learning_rate,
+                    epsilon=FLAGS.opt_epsilon)
     elif FLAGS.optimizer == 'ftrl':
         optimizer = tf.train.FtrlOptimizer(
                     learning_rate,
@@ -134,44 +141,28 @@ def _configure_optimizer(learning_rate):
 
 
 model_path = FLAGS.train_dir
-#  if not os.path.exists(model_path):
-#      os.makedirs(model_path)
-#  else:
-#      empty_dir(os.path.dirname(model_path))
 
 
-
-file_train = tb.open_file(os.path.join(os.getcwd(), 'train.h5'), 'r')
-#file_train = tb.open_file(FLAGS.train_file, 'r')
+#  file_train = tb.open_file(os.path.join(os.getcwd(), 'train.h5'), 'r')
+file_train = tb.open_file(FLAGS.train_file, 'r')
 utts = file_train.root.utterance[:]
 speakerinfo = file_train.root.speakerinfo[:]
 utt_features, utt_labels, utt_num_samples = split_data_into_utt(utts, speakerinfo, FLAGS)
 
-file_test = tb.open_file(os.path.join(os.getcwd(), 'test.h5'), 'r')
+file_test = tb.open_file(FLAGS.test_file, 'r')
 test_utts = file_test.root.utterance[:]
 test_speakerinfo = file_test.root.speakerinfo[:]
 test_features, test_labels, test_num_samples = split_data_into_utt(test_utts, test_speakerinfo, FLAGS)
-test_features, test_labels, test_num_samples = test_features[0:10], test_labels[0:10], test_num_samples[0:10]
-#  c_utt = 0
-#  utt_features_temp = []
-#  utt_labels_temp = []
-#  utt_num_samples_temp = []
-#  for index in range(len(utt_labels)):
-#      if int(c_utt) != int(utt_labels[index]):
-#          utt_features_temp.append(utt_features[index])
-#          utt_labels_temp.append(utt_labels[index])
-#          utt_num_samples_temp.append(utt_num_samples[index])
-#          c_utt = utt_labels[index]
 
-#  utt_features = utt_features_temp
-#  utt_labels = utt_labels_temp
-#  utt_num_samples = utt_num_samples_temp
+num_test_utt = int(FLAGS.num_test_utt)
+test_features, test_labels, test_num_samples = test_features[0:num_test_utt], test_labels[0:num_test_utt], test_num_samples[0:num_test_utt]
 
 num_speakers = np.max(utt_labels)
 print("utts feature length:", len(utt_features), ", utts labels length:", len(utt_labels), ", utt num samples list length:", len(utt_num_samples))
-print("utt num samples:", utt_num_samples)
+print("utt num samples:", np.sum(utt_num_samples))
 #  time.sleep(100)
 #      exit(1)
+check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-' + FLAGS.check_point)
 
 def main(_):
     global utt_features, utt_labels, utt_num_samples
@@ -185,8 +176,8 @@ def main(_):
         global_step = tf.Variable(0, name='global_step', trainable=False)
         #  learning_rate = _configure_learning_rate(num_samples_per_epoch, global_step)
         # custom learning rate
-        boundaries = [2000, 5000, 8000, 12000, 15000, 18000, 20000, 30000]
-        values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.000005, 0.000003]
+        boundaries = [2000, 5000, 8000, 12000, 15000, 18000, 20000, 25000]
+        values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.000005]
         # small dataset learning rate
         #  boundaries = [300, 1000, 1500, 2000, 3000, 4000, 5000, 6000]
         #  values = [0.001, 0.0005, 0.0003, 0.0001, 0.00005, 0.00003, 0.00001, 0.00005, 0.000005]
@@ -224,19 +215,13 @@ def main(_):
         summary_op = tf.summary.merge(list(summaries), name='summary_op')
         summary_merged = tf.summary.merge_all()
 
-    check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-1200')
     config = tf.ConfigProto(allow_soft_placement=True, device_count = {'GPU':1})
     config.gpu_options.allow_growth = True
     with tf.Session(graph=graph, config=config) as sess:
         saver = tf.train.Saver()
         summary_writer = tf.summary.FileWriter(model_path, graph=graph)
         sess.run(tf.global_variables_initializer())
-        #  sess.run(tf.local_variables_initializer())
         saver.restore(sess, check_point_dir)
-        #  print(batch_datas[:])
-        #  print(batch_labels[:])
-        #  print("utts_train:", utts_train)
-        #  exit(1)
 
         # small data for test
         if FLAGS.small_dataset_test:

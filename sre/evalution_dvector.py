@@ -15,7 +15,11 @@ from model.model import *
 from utils.tools import *
 import os
 
-tf.app.flags.DEFINE_string('train_dir', 'dvector_model/train_logs', 'train model store path')
+tf.app.flags.DEFINE_string('train_dir', 'dvector_model_test/train_logs', 'train model store path')
+tf.app.flags.DEFINE_string('check_point', '9600', 'train model store step')
+tf.app.flags.DEFINE_string('num_speakers', 1972, 'equal to number of speaker in train dataset, which is used to restore model')
+tf.app.flags.DEFINE_string('enroll_file', os.path.join(os.getcwd(), 'enroll.h5'), 'enroll data file path')
+tf.app.flags.DEFINE_string('test_file', os.path.join(os.getcwd(), 'test.h5'), 'test data file path')
 
 
 tf.app.flags.DEFINE_float('learning_rate', 0.0005,
@@ -128,34 +132,23 @@ def _configure_optimizer(learning_rate):
 
 
 model_path = FLAGS.train_dir
-#  if not os.path.exists(model_path):
-#      os.makedirs(model_path)
-#  else:
-#      empty_dir(model_path)
 
 
 
-file_enroll = tb.open_file(os.path.join(os.getcwd(), 'enroll.h5'), 'r')
-file_test = tb.open_file(os.path.join(os.getcwd(), 'test.h5'), 'r')
+file_enroll = tb.open_file(FLAGS.enroll_file, 'r')
 enroll_utts = file_enroll.root.utterance[:]
 enroll_speakerinfo = file_enroll.root.speakerinfo[:]
 enroll_features, enroll_labels, enroll_num_samples = split_data_into_utt(enroll_utts, enroll_speakerinfo, FLAGS)
+
+file_test = tb.open_file(FLAGS.test_file, 'r')
 test_utts = file_test.root.utterance[:]
 test_speakerinfo = file_test.root.speakerinfo[:]
 test_features, test_labels, test_num_samples = split_data_into_utt(test_utts, test_speakerinfo, FLAGS)
 
-# small dataset test
-#  enroll_features = enroll_features[:10]
-#  enroll_labels = enroll_labels[:10]
-#  enroll_num_samples = enroll_num_samples[:10]
-#  test_features = test_features[:10]
-#  test_labels = test_labels[:10]
-#  test_num_samples = test_num_samples[:10]
-#need using define in sre_dvector
-num_speakers = 42
+num_speakers = int(FLAGS.num_speakers)
 
 #model file path
-check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-1600')
+check_point_dir = os.path.join(os.path.dirname(os.path.abspath(model_path)), 'train_logs-' + FLAGS.check_point)
 
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -165,9 +158,6 @@ def main(_):
         global_step = tf.Variable(0, name='global_step', trainable=False)
         neighbor_dim = FLAGS.left_context + FLAGS.right_context + 1
         lstm_time = FLAGS.lstm_time
-        #  cnn_inputs = tf.placeholder(tf.float32, [30, neighbor_dim, FLAGS.feature_dim, 1])
-        #  cnn = get_cnn_net(cnn_inputs, FLAGS)
-        #  print("cnn shape:", cnn.shape)
         with tf.variable_scope(tf.get_variable_scope()):
             with tf.device('/gpu:0'):
                 inputs = tf.placeholder(tf.float32, [FLAGS.batch_size, lstm_time, neighbor_dim, FLAGS.feature_dim])
@@ -251,7 +241,7 @@ def main(_):
         #  print("enroll dvectors:", enroll_dvectors )
         #  print("test dvectors:", test_dvectors )
         eer, eer_th = compute_eer(enroll_dvectors, test_dvectors)
-        print("eer: %.2f, threshold: %.2f" % (eer, eer_th))
+        print("eer: %.4f, threshold: %.4f" % (eer, eer_th))
 
 
 
