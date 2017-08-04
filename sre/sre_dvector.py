@@ -308,6 +308,7 @@ def main(_):
 
         last_loss = -1.0
         num_advance_batch_samples = FLAGS.num_advance_batch_samples
+        step = 0
         for epoch in range(FLAGS.num_epochs):
             c_utt_index = 0
             c_utt_used_samples = 0
@@ -352,14 +353,14 @@ def main(_):
                 print("program out labels:", out_judge + 1)
                 print("true lables:", out_true_judge + 1)
                 print("learning rate:", out_learning_rate)
-                if last_loss < 0:
-                    last_loss = loss_value
-                else:
-                    if float(10 * last_loss) < float(loss_value) or float(last_loss) > 1000000.0:
-                        print("loss increase in error state")
-                        exit(1)
-                    else:
-                        last_loss = loss_value
+                #  if last_loss < 0:
+                #      last_loss = loss_value
+                #  else:
+                #      if float(10 * last_loss) < float(loss_value) or float(last_loss) > 1000000.0:
+                #          print("loss increase in error state")
+                #          exit(1)
+                #      else:
+                #          last_loss = loss_value
             # save and test each epoch
             saver.save(sess, model_path, global_step=step)
             # testing small test dataset
@@ -387,7 +388,7 @@ def main(_):
                     test_dvectors[speaker_label] = spk_dvector
             eer, eer_th = compute_eer(test_dvectors, test_dvectors)
             with open(FLAGS.test_accuracy_log, 'a') as f:
-                f.write('epoch %d, eer: %.4f, threshold: %.4f\n' % (epoch, eer, eer_th))
+                f.write('epoch %d, global step:%d, eer: %.4f, threshold: %.4f\n' % (epoch + 1, step, eer, eer_th))
             f.close()
             print("eer: %.2f, threshold: %.2f" % (eer, eer_th))
 

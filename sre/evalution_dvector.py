@@ -16,7 +16,7 @@ from utils.tools import *
 import os
 
 tf.app.flags.DEFINE_string('train_dir', 'dvector_model_test/train_logs', 'train model store path')
-tf.app.flags.DEFINE_string('check_point', '9600', 'train model store step')
+tf.app.flags.DEFINE_string('check_point', '64000', 'train model store step')
 tf.app.flags.DEFINE_string('num_speakers', 1972, 'equal to number of speaker in train dataset, which is used to restore model')
 tf.app.flags.DEFINE_string('enroll_file', os.path.join(os.getcwd(), 'enroll.h5'), 'enroll data file path')
 tf.app.flags.DEFINE_string('test_file', os.path.join(os.getcwd(), 'test.h5'), 'test data file path')
@@ -159,7 +159,7 @@ def main(_):
         neighbor_dim = FLAGS.left_context + FLAGS.right_context + 1
         lstm_time = FLAGS.lstm_time
         with tf.variable_scope(tf.get_variable_scope()):
-            with tf.device('/gpu:0'):
+            with tf.device('/cpu:0'):
                 inputs = tf.placeholder(tf.float32, [FLAGS.batch_size, lstm_time, neighbor_dim, FLAGS.feature_dim])
                 labels = tf.placeholder(tf.int32, [FLAGS.batch_size])
                 if FLAGS.training:
@@ -194,7 +194,7 @@ def main(_):
             summary_merged = tf.summary.merge_all()
 
 
-    with tf.Session(graph=graph, config=tf.ConfigProto(allow_soft_placement=True, device_count = {'GPU':1})) as sess:
+    with tf.Session(graph=graph, config=tf.ConfigProto(allow_soft_placement=True, device_count = {'GPU':0})) as sess:
         saver = tf.train.Saver()
         sess.run(tf.global_variables_initializer())
 #        sess.run(tf.local_variables_initializer())
@@ -216,7 +216,7 @@ def main(_):
                 speaker_dvectors.append(spk_dvector)
             # use mean of dvectors as speaker dvector
             speaker_average_dvector = np.mean(speaker_dvectors, axis=0)
-            speaker_label = str(test_labels[index]) + '_' + str(index)
+            speaker_label = str(test_labels[index]) + '_enroll'
             enroll_dvectors[speaker_label] = speaker_average_dvector
             print("finish enroll speaker [%s] utt" % (speaker_label))
 
@@ -234,7 +234,7 @@ def main(_):
                 speaker_dvectors.append(spk_dvector)
             # use mean of dvectors as speaker dvector
             speaker_average_dvector = np.mean(speaker_dvectors, axis=0)
-            speaker_label = str(test_labels[index]) + '_' + str(index)
+            speaker_label = str(test_labels[index]) + '_test'
             test_dvectors[speaker_label] = speaker_average_dvector
             print("finish test speaker [%s] utt" % (speaker_label))
 
