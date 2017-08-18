@@ -25,9 +25,10 @@ def cosine_similarity(X, Y):
     if X.shape != Y.shape:
         print("error shape between X and Y, X shape:", X.shape, ", Y shape:", Y.shape)
         exit(1)
-    x = np.sqrt(np.sum(np.square(X)))
-    y = np.sqrt(np.sum(np.square(Y)))
-    ret = np.dot(X,Y) / x / y
+    division = np.sum(np.square(X)) * np.sum(np.square(Y))
+    #  x = np.sqrt(np.sum(np.square(X)))
+    #  y = np.sqrt(np.sum(np.square(Y)))
+    ret = np.dot(X,Y) / np.sqrt(division)
     return ret
 
 def compute_eer(enroll_dvectors, test_dvectors):
